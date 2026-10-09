@@ -1,0 +1,81 @@
+name: Build APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle (with dependency cache)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Unit tests
+        run: ./gradlew :domain:test :data:testDebugUnitTest --no-daemon
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            domain/build/reports/tests
+            data/build/reports/tests
+
+      # Постоянный ключ подписи хранится в GitHub Secrets: без него новая сборка не встанет поверх старой
+      - name: Prepare signing key
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "KEYSTORE_FILE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::KEYSTORE_BASE64 secret is not set: building with a throwaway debug key, no release will be published"
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # versionCode = номер запуска CI, поэтому каждая сборка новее предыдущей
+      - name: Build release APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon -PbuildNumber=${{ github.run_number }}
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: what-to-wear-apk
+          path: app/build/outputs/apk/release/app-release.apk
+
+      # Ветка main = релиз: приложение само находит его и предлагает обновиться
+      - name: Publish release (the app checks this for updates)
+        if: github.ref == 'refs/heads/main' && steps.signing.outputs.signed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk what-to-wear.apk
+          gh release create "build-${{ github.run_number }}" what-to-wear.apk \
+            --title "Сборка ${{ github.run_number }}" \
+            --notes "${COMMIT_MSG:-Автоматическая сборка}" \
+            --latest

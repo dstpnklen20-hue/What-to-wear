@@ -1,0 +1,5 @@
+# gradlew запускается на Linux (CI) — только LF; bat-файлы — CRLF
+gradlew text eol=lf
+*.bat text eol=crlf
+*.jar binary
+*.ttf binary

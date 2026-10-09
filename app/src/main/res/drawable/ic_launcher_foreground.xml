@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Линейная вешалка с солнцем: одна акцентная линия на нейтральном фоне -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M48,41a6,6 0,1 1,6 6v4L29,65.5Q27,67 29.5,67H78.5Q81,67 79,65.5L54,51"
+        android:strokeWidth="3.5"
+        android:strokeColor="#2F5BEA"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M72,33m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0M72,24.5v2M72,39.5v2M63.5,33h2M78.5,33h2"
+        android:strokeWidth="2.5"
+        android:strokeColor="#2F5BEA"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+</vector>

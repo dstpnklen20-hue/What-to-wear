@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">What to wear</string>
+    <string name="notification_channel_morning">Утренний прогноз</string>
+    <string name="notification_channel_morning_desc">Погода на день и что надеть</string>
+    <string name="widget_description">Погода и главная вещь дня</string>
+    <string name="widget_name">Погода и одежда</string>
+</resources>
