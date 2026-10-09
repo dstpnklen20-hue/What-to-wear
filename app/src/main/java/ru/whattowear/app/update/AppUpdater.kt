@@ -39,7 +39,7 @@ sealed interface UpdateState {
 /**
  * Автообновление как в Tik Tak: CI публикует каждую сборку из main как релиз GitHub «build-N»
  * (N = versionCode). Приложение смотрит последний релиз, скачивает APK и передаёт его системному установщику.
- * Обращается только к api.github.com и только для сборок из CI (у локальных versionCode = 1).
+ * Обращается только к api.github.com; сама проверяет только сборки из CI (BuildConfig.CI_BUILD).
  */
 @Singleton
 class AppUpdater @Inject constructor(
@@ -60,9 +60,9 @@ class AppUpdater @Inject constructor(
     private val prefs get() = context.getSharedPreferences("updater", Context.MODE_PRIVATE)
     private val apkFile get() = File(File(context.cacheDir, "updates").apply { mkdirs() }, "update.apk")
 
-    /** [manual] — по кнопке в настройках: проверяет и локальные сборки и показывает «обновлений нет». */
+    /** [manual] — по кнопке в настройках: проверяет и локальные сборки. */
     suspend fun check(manual: Boolean) {
-        if (!manual && currentCode <= 1L) return
+        if (!manual && !BuildConfig.CI_BUILD) return
         val s = _state.value
         if (s is UpdateState.Checking || s is UpdateState.Downloading) return
         _state.value = UpdateState.Checking

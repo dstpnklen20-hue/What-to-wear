@@ -13,7 +13,7 @@ Android-приложение: погода (усреднение несколь�
 
 - CI: `.github/workflows/build.yml`. Push в любую ветку — тесты + APK-артефакт; push в `main` — релиз `build-N`,
   который приложение находит само (`app/.../update/AppUpdater.kt`) и предлагает установить.
-- `versionCode` = `github.run_number` (`-PbuildNumber`); локальные сборки — код 1, без автообновления.
+- `versionCode` = `github.run_number` (`-PbuildNumber`); автопроверка — только при `BuildConfig.CI_BUILD` (сборка с `-PbuildNumber`).
 - Подпись: ключ `F:\AndroidDev\keys\what-to-wear.jks`, значения для Secrets — в `what-to-wear-github-secrets.txt` там же.
   Ключ, `applicationId = ru.whattowear.app` и `updateRepo` в `app/build.gradle.kts` у выпущенного приложения не менять.
 

@@ -7,8 +7,9 @@ plugins {
 }
 
 // CI передаёт номер запуска: каждая сборка из GitHub получает versionCode больше предыдущей.
-// Локальные сборки имеют код 1 — автообновление для них выключено.
-val buildNumber = (project.findProperty("buildNumber") as String?)?.toIntOrNull() ?: 1
+// Автообновление включено только у сборок из CI (флаг CI_BUILD), у локальных его нет.
+val ciBuildNumber = (project.findProperty("buildNumber") as String?)?.toIntOrNull()
+val buildNumber = ciBuildNumber ?: 1
 
 // Репозиторий GitHub, в котором CI публикует релизы build-N (приложение проверяет их для автообновления).
 // Не менять у выпущенного приложения: старые версии смотрят именно сюда.
@@ -27,6 +28,7 @@ android {
         versionName = "1.0.$buildNumber"
 
         buildConfigField("String", "UPDATE_REPO", "\"$updateRepo\"")
+        buildConfigField("boolean", "CI_BUILD", (ciBuildNumber != null).toString())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
