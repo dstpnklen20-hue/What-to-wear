@@ -14,11 +14,20 @@ enum class WeatherModel(
     private val shortRangeWeight: Double,
     private val longRangeWeight: Double,
 ) {
-    ICON("icon_seamless", "ICON", 0.30, 0.20),
-    ECMWF("ecmwf_ifs", "ECMWF", 0.25, 0.35),
-    BEST_MATCH("best_match", "Open-Meteo", 0.20, 0.20),
-    GFS("gfs_seamless", "GFS", 0.10, 0.10),
-    MET_NO(null, "MET Norway", 0.15, 0.15);
+    /** DWD ICON: в Европе и европейской части России — ICON-EU (7 км) и ICON-D2, дальше — глобальная (11 км). */
+    ICON("icon_seamless", "ICON", 0.25, 0.15),
+    /** ECMWF IFS HRES 9 км (открытые данные с октября 2025 г.). */
+    ECMWF("ecmwf_ifs", "ECMWF", 0.25, 0.27),
+    /**
+     * ECMWF AIFS Single — ИИ-модель ECMWF, по оценкам ECMWF точнее IFS по температуре у земли и ветру,
+     * но шаг у неё 6 часов (часы между ними Open-Meteo интерполирует), поэтому вес растёт к дальним дням.
+     */
+    AIFS("ecmwf_aifs025_single", "ECMWF AIFS", 0.05, 0.17),
+    BEST_MATCH("best_match", "Open-Meteo", 0.15, 0.13),
+    /** UK Met Office Global 10 км, до 7 дней. Независимая от ECMWF и DWD физическая модель. */
+    UKMO("ukmo_seamless", "UK Met Office", 0.12, 0.10),
+    GFS("gfs_seamless", "GFS", 0.06, 0.06),
+    MET_NO(null, "MET Norway", 0.12, 0.12);
 
     /** Вес на заданном горизонте (часы от текущего момента): до 36 ч — краткосрочный, после 60 ч — долгосрочный. */
     fun weightAt(hoursAhead: Double): Double {
@@ -27,7 +36,7 @@ enum class WeatherModel(
     }
 
     companion object {
-        val openMeteoModels = listOf(ICON, ECMWF, BEST_MATCH, GFS)
+        val openMeteoModels = listOf(ICON, ECMWF, AIFS, BEST_MATCH, UKMO, GFS)
     }
 }
 

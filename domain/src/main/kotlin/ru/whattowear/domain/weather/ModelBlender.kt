@@ -4,6 +4,7 @@ import ru.whattowear.domain.model.HourlyWeather
 import ru.whattowear.domain.model.PrecipType
 import ru.whattowear.domain.model.WeatherKind
 import java.time.Instant
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -21,6 +22,9 @@ object ModelBlender {
 
     /** Порог «есть осадки» для одной модели, мм/ч. */
     const val WET_THRESHOLD_MM = 0.1
+
+    /** С какого числа моделей при оценке разброса отбрасывается одна модель-выброс. */
+    const val MIN_MODELS_FOR_OUTLIER = 4
 
     /** Снег в см → вода в мм (Open-Meteo: 1 мм воды ≈ 0.7 см снега). */
     private const val SNOW_CM_PER_MM = 0.7
@@ -92,11 +96,25 @@ object ModelBlender {
             uvIndex = items.avg { it.uvIndex }?.round1(),
             kind = kind,
             isDay = isDay(time, items, raw),
-            tempSpread = (temps.max() - temps.min()).round1(),
-            precipSpread = if (precips.isEmpty()) 0.0 else (precips.max() - precips.min()).round2(),
+            tempSpread = spread(temps, temperature).round1(),
+            precipSpread = spread(precips, precipitation).round2(),
             wetShare = wetShare,
             modelCount = items.size,
         )
+    }
+
+    /**
+     * Разброс моделей (максимум − минимум). Когда моделей от [MIN_MODELS_FOR_OUTLIER] и больше, одна самая
+     * далёкая от среднего не учитывается: иначе любая одиночная модель-«выброс» делала бы прогноз «неуверенным».
+     */
+    internal fun spread(values: List<Double>, mean: Double): Double {
+        if (values.size < 2) return 0.0
+        val used = if (values.size >= MIN_MODELS_FOR_OUTLIER) {
+            values.toMutableList().apply { remove(maxBy { abs(it - mean) }) }
+        } else {
+            values
+        }
+        return used.max() - used.min()
     }
 
     /** Взвешенное среднее по моделям, где значение есть; null — если его нет ни у одной. */
