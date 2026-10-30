@@ -1,8 +1,5 @@
 package ru.whattowear.app.ui.today
 
-import android.Manifest
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.clickable
@@ -38,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -48,9 +46,13 @@ import ru.whattowear.app.ui.components.EmptyState
 import ru.whattowear.app.ui.components.HourlyStrip
 import ru.whattowear.app.ui.components.NoteBanner
 import ru.whattowear.app.ui.components.SectionLabel
+import ru.whattowear.app.ui.components.locationProblemText
+import ru.whattowear.app.ui.components.openLocationSettings
+import ru.whattowear.app.ui.components.rememberLocationPermissionRequest
 import ru.whattowear.app.ui.components.WeatherIcon
 import ru.whattowear.app.ui.components.weatherTitle
 import ru.whattowear.domain.repository.FailureReason
+import ru.whattowear.domain.usecase.DeviceLocationUpdate
 import ru.whattowear.domain.text.Fmt
 
 @Composable
@@ -63,10 +65,8 @@ fun TodayScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.onResume() }
 
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-        viewModel.onLocationPermissionResult(result.values.any { it })
-    }
-    val requestLocation = { permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION)) }
+    val context = LocalContext.current
+    val permission = rememberLocationPermissionRequest(viewModel::onLocationPermissionResult)
 
     Box(Modifier.fillMaxSize().statusBarsPadding()) {
         when {
@@ -75,14 +75,18 @@ fun TodayScreen(
                 icon = Icons.Outlined.LocationOn,
                 title = "Где вы находитесь?",
                 message = when {
+                    !state.hasLocationPermission && permission.blocked ->
+                        locationProblemText(DeviceLocationUpdate.NO_PERMISSION, permissionBlocked = true)
                     !state.hasLocationPermission ->
                         "Чтобы показать погоду, разрешите доступ к приблизительному местоположению или выберите город вручную."
                     state.isRefreshing -> "Определяем местоположение…"
-                    else -> "Не удалось определить местоположение. Проверьте, что геолокация включена, или выберите город вручную."
+                    else -> locationProblemText(state.locationProblem ?: DeviceLocationUpdate.NOT_FOUND, permissionBlocked = false)
                 },
                 primaryAction = when {
-                    !state.hasLocationPermission -> "Определить местоположение" to requestLocation
+                    !state.hasLocationPermission && permission.blocked -> "Открыть настройки" to permission.request
+                    !state.hasLocationPermission -> "Определить местоположение" to permission.request
                     state.isRefreshing -> null
+                    state.locationProblem == DeviceLocationUpdate.DISABLED -> "Включить геолокацию" to { openLocationSettings(context) }
                     else -> "Повторить" to viewModel::onPullToRefresh
                 },
                 secondaryAction = "Выбрать город" to onOpenLocations,
@@ -255,6 +259,18 @@ private fun WeatherSection(state: TodayUiState, weather: WeatherSnapshot, onOpen
         }
         if (weather.usedFallback) {
             NoteBanner(Icons.Outlined.Info, "Open-Meteo недоступен — прогноз по данным MET Norway.")
+        }
+        if (state.location?.isDeviceLocation == true && state.locationProblem != null) {
+            val why = when (state.locationProblem) {
+                DeviceLocationUpdate.NO_PERMISSION -> "нет доступа к геолокации"
+                DeviceLocationUpdate.DISABLED -> "геолокация выключена"
+                else -> "нет сигнала"
+            }
+            NoteBanner(
+                Icons.Outlined.LocationOn,
+                "Местоположение не обновлено ($why) — погода для последнего известного места.",
+                action = "Города" to onOpenLocations,
+            )
         }
     }
 

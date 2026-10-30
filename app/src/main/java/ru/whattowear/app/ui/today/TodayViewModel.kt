@@ -40,6 +40,7 @@ import ru.whattowear.domain.repository.WardrobeRepository
 import ru.whattowear.domain.repository.WeatherRepository
 import ru.whattowear.domain.usecase.BuildRecommendationUseCase
 import ru.whattowear.domain.usecase.DeviceLocationUpdate
+import ru.whattowear.domain.usecase.LOCATE_TIMEOUT_MS
 import ru.whattowear.domain.usecase.NextVariantUseCase
 import ru.whattowear.domain.usecase.ObserveSelectedLocationUseCase
 import ru.whattowear.domain.usecase.RecordOutfitUseCase
@@ -56,6 +57,8 @@ data class RefreshStatus(
     /** Обновление запущено жестом «потянуть вниз» — только тогда показываем индикатор сверху. */
     val manual: Boolean = false,
     val error: FailureReason? = null,
+    /** Итог последнего определения местоположения; null — ещё не определяли. */
+    val gps: DeviceLocationUpdate? = null,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -164,12 +167,13 @@ class TodayViewModel @Inject constructor(
         viewModelScope.launch {
             status.update { it.copy(isRefreshing = true, manual = force) }
             var result: RefreshResult = RefreshResult.UpToDate
+            var gps = status.value.gps
             try {
-                // Сначала прогноз для уже известного места — не ждём GPS (он может искать до 10 секунд)
+                // Сначала прогноз для уже известного места — не ждём GPS (он может искать до 20 секунд)
                 val before = observeSelectedLocation.current()
                 result = before?.let { refreshForecast(it, force) } ?: RefreshResult.UpToDate
                 if (updateGps) {
-                    val gps = withTimeoutOrNull(20_000) { updateDeviceLocation() } ?: DeviceLocationUpdate.UNAVAILABLE
+                    gps = withTimeoutOrNull(LOCATE_TIMEOUT_MS) { updateDeviceLocation() } ?: DeviceLocationUpdate.NOT_FOUND
                     val after = observeSelectedLocation.current()
                     val moved = gps == DeviceLocationUpdate.MOVED && after?.isDeviceLocation == true
                     if (after != null && (after.id != before?.id || moved)) result = refreshForecast(after, force = moved)
@@ -177,7 +181,7 @@ class TodayViewModel @Inject constructor(
             } finally {
                 // Флаг сбрасывается всегда, иначе зависшее обновление заблокирует все следующие
                 clock.value = System.currentTimeMillis()
-                status.value = RefreshStatus(isRefreshing = false, error = (result as? RefreshResult.Failure)?.reason)
+                status.value = RefreshStatus(isRefreshing = false, error = (result as? RefreshResult.Failure)?.reason, gps = gps)
             }
         }
     }
@@ -210,6 +214,7 @@ class TodayViewModel @Inject constructor(
             showPullIndicator = status.isRefreshing && status.manual,
             error = status.error,
             hasLocationPermission = hasPermission,
+            locationProblem = status.gps?.takeIf { it.failed },
             now = now,
             feedbackDate = if (askFeedback) today else null,
             feedbackGiven = feedback?.rating,

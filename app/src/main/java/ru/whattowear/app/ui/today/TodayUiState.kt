@@ -9,6 +9,7 @@ import ru.whattowear.domain.outfit.ComfortRating
 import ru.whattowear.domain.outfit.OutfitRecommendation
 import ru.whattowear.domain.outfit.OutingWindow
 import ru.whattowear.domain.repository.FailureReason
+import ru.whattowear.domain.usecase.DeviceLocationUpdate
 import ru.whattowear.domain.weather.DaySummary
 import ru.whattowear.domain.weather.Uncertainty
 import ru.whattowear.domain.weather.UncertaintyDetector
@@ -28,6 +29,8 @@ data class TodayUiState(
     val showPullIndicator: Boolean = false,
     val error: FailureReason? = null,
     val hasLocationPermission: Boolean = false,
+    /** Почему не удалось обновить «Моё местоположение»; null — всё в порядке или не определяли. */
+    val locationProblem: DeviceLocationUpdate? = null,
     val now: Long = 0,
     /** Не null — пора спросить «как вам было сегодня?» за эту дату. */
     val feedbackDate: LocalDate? = null,

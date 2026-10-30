@@ -1,8 +1,5 @@
 package ru.whattowear.app.ui.locations
 
-import android.Manifest
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,19 +36,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.whattowear.app.ui.components.Dimens
 import ru.whattowear.app.ui.components.SectionLabel
 import ru.whattowear.app.ui.components.ThinDivider
+import ru.whattowear.app.ui.components.locationProblemText
+import ru.whattowear.app.ui.components.openLocationSettings
+import ru.whattowear.app.ui.components.rememberLocationPermissionRequest
+import ru.whattowear.domain.usecase.DeviceLocationUpdate
 import ru.whattowear.domain.model.Location
 
 @Composable
 fun LocationsScreen(onBack: () -> Unit, viewModel: LocationsViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-        viewModel.onPermissionResult(result.values.any { it })
-    }
+    val context = LocalContext.current
+    val permission = rememberLocationPermissionRequest(viewModel::onPermissionResult)
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.onResume() }
 
     Box(Modifier.fillMaxSize().statusBarsPadding().imePadding(), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.widthIn(max = Dimens.contentMaxWidth).fillMaxSize()) {
@@ -82,9 +86,10 @@ fun LocationsScreen(onBack: () -> Unit, viewModel: LocationsViewModel = hiltView
                     state = state,
                     onSelect = viewModel::select,
                     onDelete = viewModel::delete,
-                    onLocate = {
-                        if (state.hasPermission) viewModel.locateNow()
-                        else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION))
+                    permissionBlocked = permission.blocked,
+                    onLocate = { if (state.hasPermission) viewModel.locateNow() else permission.request() },
+                    onFix = { problem ->
+                        if (problem == DeviceLocationUpdate.DISABLED) openLocationSettings(context) else permission.request()
                     },
                 )
             }
@@ -134,7 +139,9 @@ private fun SavedLocations(
     state: LocationsUiState,
     onSelect: (Long) -> Unit,
     onDelete: (Location) -> Unit,
+    permissionBlocked: Boolean,
     onLocate: () -> Unit,
+    onFix: (DeviceLocationUpdate) -> Unit,
 ) {
     val device = state.locations.firstOrNull { it.isDeviceLocation }
     val saved = state.locations.filter { !it.isDeviceLocation }
@@ -160,8 +167,17 @@ private fun SavedLocations(
                     )
                 }
             }
-            if (state.locateFailed) {
-                Hint("Не удалось определить местоположение. Проверьте, что геолокация включена, или выберите город поиском.")
+            state.locateProblem?.let { problem ->
+                Hint(locationProblemText(problem, permissionBlocked))
+                val fix = when {
+                    problem == DeviceLocationUpdate.DISABLED -> "Включить геолокацию"
+                    problem == DeviceLocationUpdate.NO_PERMISSION && permissionBlocked -> "Открыть настройки"
+                    problem == DeviceLocationUpdate.NO_PERMISSION -> "Разрешить доступ"
+                    else -> null
+                }
+                fix?.let { label ->
+                    TextButton(onClick = { onFix(problem) }, modifier = Modifier.padding(horizontal = 4.dp)) { Text(label) }
+                }
             }
         }
         item { SectionLabel("Сохранённые города", Modifier.padding(start = Dimens.screenPadding, end = Dimens.screenPadding, top = 20.dp, bottom = 8.dp)) }

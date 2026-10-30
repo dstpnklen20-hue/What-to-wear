@@ -20,6 +20,7 @@ import ru.whattowear.domain.repository.DeviceLocationSource
 import ru.whattowear.domain.repository.LocationRepository
 import ru.whattowear.domain.repository.SettingsRepository
 import ru.whattowear.domain.usecase.DeviceLocationUpdate
+import ru.whattowear.domain.usecase.LOCATE_TIMEOUT_MS
 import ru.whattowear.domain.usecase.ObserveSelectedLocationUseCase
 import ru.whattowear.domain.usecase.RefreshForecastUseCase
 import ru.whattowear.domain.usecase.UpdateDeviceLocationUseCase
@@ -40,7 +41,8 @@ data class LocationsUiState(
     val search: SearchState = SearchState.Idle,
     val hasPermission: Boolean = false,
     val locating: Boolean = false,
-    val locateFailed: Boolean = false,
+    /** Почему не удалось определить местоположение по кнопке; null — не пробовали или всё хорошо. */
+    val locateProblem: DeviceLocationUpdate? = null,
 )
 
 @OptIn(FlowPreview::class)
@@ -57,14 +59,14 @@ class LocationsViewModel @Inject constructor(
     private val query = MutableStateFlow("")
     private val search = MutableStateFlow<SearchState>(SearchState.Idle)
     private val locating = MutableStateFlow(false)
-    private val locateFailed = MutableStateFlow(false)
+    private val locateProblem = MutableStateFlow<DeviceLocationUpdate?>(null)
     private val permission = MutableStateFlow(deviceLocation.hasPermission())
 
     val state: StateFlow<LocationsUiState> = combine(
         combine(repository.observeLocations(), observeSelected()) { list, selected -> list to selected?.id },
         query,
         search,
-        combine(permission, locating, locateFailed) { p, l, f -> Triple(p, l, f) },
+        combine(permission, locating, locateProblem) { p, l, f -> Triple(p, l, f) },
     ) { (list, selectedId), q, s, (p, l, f) ->
         LocationsUiState(list, selectedId, q, s, p, l, f)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LocationsUiState())
@@ -121,19 +123,32 @@ class LocationsViewModel @Inject constructor(
 
     fun onPermissionResult(granted: Boolean) {
         permission.value = granted
-        if (granted) locateNow()
+        if (granted) locateNow() else locateProblem.value = DeviceLocationUpdate.NO_PERMISSION
+    }
+
+    /** Вернулись из настроек — разрешение или геолокация могли измениться. */
+    fun onResume() {
+        val granted = deviceLocation.hasPermission()
+        val changed = granted != permission.value
+        permission.value = granted
+        val problem = locateProblem.value
+        if (granted && (changed || problem == DeviceLocationUpdate.NO_PERMISSION ||
+                (problem == DeviceLocationUpdate.DISABLED && deviceLocation.isLocationEnabled()))
+        ) {
+            locateNow()
+        }
     }
 
     fun locateNow() {
         if (locating.value) return
         viewModelScope.launch {
             locating.value = true
-            locateFailed.value = false
+            locateProblem.value = null
             try {
-                val result = withTimeoutOrNull(20_000) { updateDeviceLocation() } ?: DeviceLocationUpdate.UNAVAILABLE
+                val result = withTimeoutOrNull(LOCATE_TIMEOUT_MS) { updateDeviceLocation() } ?: DeviceLocationUpdate.NOT_FOUND
                 val device = repository.getLocations().firstOrNull { it.isDeviceLocation }
-                if (result == DeviceLocationUpdate.UNAVAILABLE || device == null) {
-                    locateFailed.value = true
+                if (result.failed || device == null) {
+                    locateProblem.value = if (result.failed) result else DeviceLocationUpdate.NOT_FOUND
                 } else {
                     settings.setSelectedLocation(device.id)
                     refreshForecast(device, force = result == DeviceLocationUpdate.MOVED)

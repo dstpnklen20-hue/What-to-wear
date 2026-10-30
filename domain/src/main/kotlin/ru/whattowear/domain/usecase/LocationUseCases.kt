@@ -29,11 +29,17 @@ class ObserveSelectedLocationUseCase @Inject constructor(
 }
 
 enum class DeviceLocationUpdate {
-    /** Нет разрешения или координаты не получены. */
-    UNAVAILABLE,
+    /** Пользователь не дал доступ к местоположению. */
+    NO_PERMISSION,
+    /** Геолокация выключена в настройках телефона. */
+    DISABLED,
+    /** Координаты не получены: нет сигнала и последней известной позиции (или истекло время). */
+    NOT_FOUND,
     UNCHANGED,
     /** Место создано или заметно сдвинулось — прогноз нужно перезагрузить. */
-    MOVED,
+    MOVED;
+
+    val failed: Boolean get() = this == NO_PERMISSION || this == DISABLED || this == NOT_FOUND
 }
 
 /**
@@ -46,8 +52,9 @@ class UpdateDeviceLocationUseCase @Inject constructor(
     private val settings: SettingsRepository,
 ) {
     suspend operator fun invoke(): DeviceLocationUpdate {
-        if (!source.hasPermission()) return DeviceLocationUpdate.UNAVAILABLE
-        val coordinates = source.currentLocation() ?: return DeviceLocationUpdate.UNAVAILABLE
+        if (!source.hasPermission()) return DeviceLocationUpdate.NO_PERMISSION
+        if (!source.isLocationEnabled()) return DeviceLocationUpdate.DISABLED
+        val coordinates = source.currentLocation() ?: return DeviceLocationUpdate.NOT_FOUND
         val existing = locations.getLocations().firstOrNull { it.isDeviceLocation }
         // Название ищем, только если место заметно изменилось (~1 км) — Geocoder небыстрый
         val moved = existing == null ||
@@ -60,3 +67,6 @@ class UpdateDeviceLocationUseCase @Inject constructor(
         return DeviceLocationUpdate.MOVED
     }
 }
+
+/** Сколько ждать определения местоположения вместе с названием места (GPS без сигнала ищет долго). */
+const val LOCATE_TIMEOUT_MS = 30_000L

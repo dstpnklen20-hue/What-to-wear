@@ -39,9 +39,12 @@ interface LocationRepository {
     suspend fun upsertDeviceLocation(coordinates: LatLon, name: String?): Long
 }
 
-/** Текущее местоположение устройства (FusedLocationProvider). */
+/** Текущее местоположение устройства (Google Play Services, а без них — системный LocationManager). */
 interface DeviceLocationSource {
     fun hasPermission(): Boolean
+    /** Включена ли геолокация в настройках системы. */
+    fun isLocationEnabled(): Boolean
+    /** Свежие координаты, а если их не получить — последние известные; null — ничего нет. */
     suspend fun currentLocation(): LatLon?
     /** Название места по координатам (системный Geocoder); null — если недоступно. */
     suspend fun placeName(coordinates: LatLon): String?
